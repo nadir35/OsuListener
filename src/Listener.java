@@ -3,6 +3,7 @@ import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.PrintWriter;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -18,6 +19,9 @@ import java.util.Properties;
 import java.util.Scanner;
 
 public class Listener {
+	private static final String SLIDER = "Slider";
+	private static final String SPINNER = "Spinner";
+	private static final String HIT_CIRCLE = "Hit Circle";
 	private static boolean listenerStarted = false;
 	public static String osuPath = "";
 	public static String audioShieldPath = "";
@@ -128,7 +132,7 @@ public class Listener {
 			{
 				// copy the hitobjects to the VR mod LUA
 				ArrayList<HitObject> hitobjects = extractHitObjects(beatMap);
-				String meteorNodes = convertBeatmapToLuaNodes(hitobjects);
+				String meteorNodes = convertHitObjectsToLuaNodes(hitobjects);
 				insertNodes(meteorNodes);
 				showBeatmapInfo(beatMap);
 			}
@@ -148,9 +152,56 @@ public class Listener {
 		// use insertion markers in the lua file??
 	}
 
-	private static String convertBeatmapToLuaNodes(ArrayList<HitObject> hitobjects) {
-		// TODO Auto-generated method stub
-		return null;
+	private static String convertHitObjectsToLuaNodes(ArrayList<HitObject> hitobjects) throws FileNotFoundException {
+
+		// nodes[i] - checks if there is a hitobject on the time i, can be jump
+		// duck run or dirty
+		// meteorspeed = approachrate?
+		// each meteor attribute is just a ordered list of attributes
+		// meteornodes[index] = trackIndex
+		// DO EVERYTHING IN JAVA, BUT USE SOME LUA VALUES IN JAVA STRINGS?
+		// for osu its really simple time is in MS from start
+		// WTF IS track [i] ?? quarterseconds? ms*10?
+		// or maybe track only starts when the beatmap is supposed to start or there is a certain buffer in front
+		// -minspacingseconds
+		// JusT DO IT FOR HITCIRCLES FIRST
+		// track = alle nodeS?
+		// nodes = die wirklichen nodes die wir spielen wollen
+		//nodes[i] = jump / duck ( red or blue)
+		// try to pla with the .seconds? maybe its on all nodes
+		//try iterating thru traffic 
+		// try print in lua for debugging
+
+		String fullString = "";
+		for (HitObject ho : hitobjects) {
+			if (ho.getType() != HIT_CIRCLE)
+				break;
+			else {
+				String meteorNodes = "              meteorNodes[#meteorNodes+1] = " + ho.getTime();
+				String meteorDirections = "              meteorDirections[#meteorDirections+1] = {0, 0,-1}";
+				String meteorImpacts = "             meteorImpacts[#meteorImpacts+1] = {" + normalizeX(ho.getPosX()) + ", adjustedImpactY, impactZ}";
+
+				fullString = fullString + meteorNodes + "\n" + meteorDirections + "\n" + meteorImpacts + "\n" + "\n";
+			}
+		}
+		try (PrintWriter out = new PrintWriter("filename.txt")) {
+			out.println(fullString);
+		}
+		return fullString;
+	}
+
+	private static String normalizeX(String posX) {
+
+		float x = Float.parseFloat(posX);
+		float normalizedX = (x - 256f) / 256f;
+		return Float.toString(normalizedX);
+	}
+
+	private static String normalizeY(String posY) {
+
+		float y = Float.parseFloat(posY);
+		float normalizedY = (y - 192f) / 192f;
+		return Float.toString(normalizedY);
 	}
 
 	private static ArrayList<HitObject> extractHitObjects(File beatMap) throws IOException {
@@ -165,11 +216,11 @@ public class Listener {
 			String type;
 			String content = hitObjectEntry;
 			if (hitObjectEntry.matches("[^,]*,[^,]*,[^,]*,[^,]*,[^,]*"))
-				type = "Hit circle";
+				type = HIT_CIRCLE;
 			else if (hitObjectEntry.matches("[^,]*,[^,]*,[^,]*,[^,]*,[^,]*,[^,]*"))
-				type = "Spinner";
+				type = SPINNER;
 			else
-				type = "Slider";
+				type = SLIDER;
 			HitObject tempHO = new HitObject(time, type, content);
 			hitobjectList.add(tempHO);
 
@@ -178,7 +229,7 @@ public class Listener {
 		return hitobjectList;
 	}
 
-	private static int nthIndexOf(String source, String sought, int n) {
+	protected static int nthIndexOf(String source, String sought, int n) {
 		int index = source.indexOf(sought);
 		if (index == -1)
 			return -1;
