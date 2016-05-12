@@ -2,6 +2,7 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -9,8 +10,10 @@ import java.nio.file.attribute.BasicFileAttributes;
 import java.nio.file.attribute.FileTime;
 import java.text.ParseException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Properties;
 import java.util.Scanner;
 
@@ -22,9 +25,10 @@ public class Listener {
 	public static String currentlyLoadedMapPath = "";
 	public static Scanner scanner = new Scanner(System.in);
 	public static String input;
+	private static Properties props = new Properties();
 
 	public static void main(String[] args) throws IOException, ParseException {
-
+		loadProps();
 		showWelcome();
 		showHelp();
 		initPaths();
@@ -42,12 +46,7 @@ public class Listener {
 			else if (input.contains("direct:")) {
 				String filePath = input.substring(input.indexOf(":") + 1);
 				File beatMap = new File(filePath);
-				if (beatMap.isFile() && beatMap.getName().contains(".osu")) {
-					System.out.println("Loading beatmap: " + beatMap.getName());
-					loadBeatmap(beatMap);
-				} else {
-					System.out.println("Path doesnt direct to a .osu file!");
-				}
+				loadBeatmapDirectly(beatMap);
 			} else if (input.equals("help")) {
 				showHelp();
 			} else if (input.equals("quit")) {
@@ -60,13 +59,25 @@ public class Listener {
 
 	}
 
-	private static void resetProps() throws ParseException {
-		Properties props = new Properties();
+	private static void loadProps() {
+		props.clear();
 		try {
-			props.load(Listener.class.getResourceAsStream("paths.properties"));
+			InputStream nfIS = Listener.class.getResourceAsStream("paths.properties");
+			props.load(nfIS);
+			nfIS.close();
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+	}
+
+	private static void resetProps() throws ParseException {
+		try {
+			loadProps();
 			props.setProperty("osuPath", "");
 			props.setProperty("audioShieldPath", "");
-			props.store(new FileOutputStream("resource/paths.properties"), null);
+			FileOutputStream nfoS = new FileOutputStream("resource/paths.properties");
+			props.store(nfoS, null);
+			nfoS.close();
 			Thread.sleep(100);
 			initPaths();
 
@@ -78,8 +89,8 @@ public class Listener {
 	}
 
 	private static void setMaxDif(String difInput) throws FileNotFoundException, IOException {
-		
-		String maxDif=difInput.substring(difInput.indexOf(":") + 1);
+
+		String maxDif = difInput.substring(difInput.indexOf(":") + 1);
 		Properties props = new Properties();
 		props.clear();
 		try {
@@ -89,20 +100,18 @@ public class Listener {
 		}
 		props.setProperty("maxDif", maxDif);
 		props.store(new FileOutputStream("resource/paths.properties"), null);
-		System.out.println("Max. overall difficulty set to "+ maxDif);
+		System.out.println("Max. overall difficulty set to " + maxDif);
 
 	}
 
 	private static void showHelp() {
 		System.out.println("Commands / Usage: \n");
-		System.out.println("\"direct:C:\\path\\beatmap.osu\"   -     load a specific beatmap directly");
-		System.out.println(
-				"\"start\"             -     start the listener, start this before AudioShield to automatically transfer your osu beatmaps to AS");
-		System.out.println(
-				"\"reset\"             -     asks you to specify the paths to your osu! and Audioshield-mod folders");
-		System.out.println("\"setMaxDif:x\"       -      sets the highest Osu Overall Difficulty to x. Default = 10");
-		System.out.println("\"help\"              -     shows you this text");
-		System.out.println("\"quit\"              -     guess what");
+		System.out.println("\"direct:C:\\path\\beatmap.osu\"	-	load a specific beatmap directly");
+		System.out.println("\"start\"	-	start the listener, start this before AudioShield to automatically transfer your osu beatmaps to AS");
+		System.out.println("\"reset\"	-	asks you to specify the paths to your osu! and Audioshield-mod folders");
+		System.out.println("\"setMaxDif:x\"		-	sets the highest Osu Overall Difficulty to x. Default = 10");
+		System.out.println("\"help\"	-	shows you this text");
+		System.out.println("\"quit\"	-	guess what");
 		System.out.println("\n");
 
 	}
@@ -113,14 +122,25 @@ public class Listener {
 		System.out.println("-------------------------------------------------------------------------------");
 	}
 
-	private static void loadBeatmap(File beatMap) {
-		// copy the hitobjects to the VR mod LUA
-		ArrayList<String> hitobjects = extractHitObjects(beatMap);
-		String meteorNodes = convertBeatmapToLuaNodes(hitobjects);
-		insertNodes(meteorNodes);
+	private static void loadBeatmapDirectly(File beatMap) throws IOException {
+		if (beatMap.isFile() && beatMap.getName().contains(".osu")) {
+			System.out.println("Loading beatmap: " + beatMap.getName());
+			{
+				// copy the hitobjects to the VR mod LUA
+				ArrayList<HitObject> hitobjects = extractHitObjects(beatMap);
+				String meteorNodes = convertBeatmapToLuaNodes(hitobjects);
+				insertNodes(meteorNodes);
+				showBeatmapInfo(beatMap);
+			}
+		} else {
+			System.out.println("Path doesnt direct to a .osu file!");
+		}
+
+	}
+
+	private static void showBeatmapInfo(File beatMap) {
 		System.out.println("Beatmap \"" + beatMap.getName() + "\" loaded!");
 		System.out.println("-------------------------------------------------------------------------------");
-
 	}
 
 	private static void insertNodes(String meteorNodes) {
@@ -128,14 +148,47 @@ public class Listener {
 		// use insertion markers in the lua file??
 	}
 
-	private static String convertBeatmapToLuaNodes(ArrayList<String> hitobjects) {
+	private static String convertBeatmapToLuaNodes(ArrayList<HitObject> hitobjects) {
 		// TODO Auto-generated method stub
 		return null;
 	}
 
-	private static ArrayList<String> extractHitObjects(File beatMap) {
-		// TODO Auto-generated method stub
-		return null;
+	private static ArrayList<HitObject> extractHitObjects(File beatMap) throws IOException {
+
+		String wholeFile = new String(Files.readAllBytes(beatMap.toPath()));
+		String onlyHitObjects = wholeFile.substring(wholeFile.indexOf("[HitObjects]") + 14);
+		List<String> list = new ArrayList<String>(Arrays.asList(onlyHitObjects.split("\\r?\\n")));
+		ArrayList<HitObject> hitobjectList = new ArrayList<HitObject>();
+		for (String hitObjectEntry : list) {
+
+			String time = hitObjectEntry.substring(nthIndexOf(hitObjectEntry, ",", 2) + 1, nthIndexOf(hitObjectEntry, ",", 3));
+			String type;
+			String content = hitObjectEntry;
+			if (hitObjectEntry.matches("[^,]*,[^,]*,[^,]*,[^,]*,[^,]*"))
+				type = "Hit circle";
+			else if (hitObjectEntry.matches("[^,]*,[^,]*,[^,]*,[^,]*,[^,]*,[^,]*"))
+				type = "Spinner";
+			else
+				type = "Slider";
+			HitObject tempHO = new HitObject(time, type, content);
+			hitobjectList.add(tempHO);
+
+		}
+		System.out.println(hitobjectList);
+		return hitobjectList;
+	}
+
+	private static int nthIndexOf(String source, String sought, int n) {
+		int index = source.indexOf(sought);
+		if (index == -1)
+			return -1;
+
+		for (int i = 1; i < n; i++) {
+			index = source.indexOf(sought, index + 1);
+			if (index == -1)
+				return -1;
+		}
+		return index;
 	}
 
 	private static void startListener() throws IOException, ParseException {
@@ -150,27 +203,7 @@ public class Listener {
 
 	}
 
-	public static class ListenerThread implements Runnable {
-
-		Scanner inputReader = new Scanner(System.in);
-
-		// Method that gets called when the object is instantiated
-		public ListenerThread() {
-		}
-
-		public void run() {
-			try {
-				updatemap();
-			} catch (IOException e) {
-				e.printStackTrace();
-			} catch (ParseException e) {
-				e.printStackTrace();
-			}
-		}
-
-	}
-
-	private static void updatemap() throws IOException, ParseException {
+	static void updatemap() throws IOException, ParseException {
 		// System.out.println(new Date() + " starting listening loop");
 		for (String filePath : songIndex.keySet()) {
 			String songFolder = filePath.substring(0, filePath.lastIndexOf("\\"));
@@ -179,14 +212,20 @@ public class Listener {
 			if (!lastAccess.equals(songIndex.get(filePath))) {
 				// this mp3 was accessed!
 				songIndex.put(filePath, lastAccess);
-				if (currentlyLoadedMapPath != filePath) {
-					System.out.println(lastAccess + " Loading MP3 : " + filePath
-							.substring(filePath.substring(0, filePath.lastIndexOf("\\") - 1).lastIndexOf("\\")));
-					currentlyLoadedMapPath = filePath;
-				}
+				loadBeatMapFromListener(songFolder);
 			}
 		}
 		// System.out.println(new Date() + " ended listening loop");
+	}
+
+	private static void loadBeatMapFromListener(String songFolder) {
+		if (currentlyLoadedMapPath != songFolder) {
+			// System.out.println(lastAccess + " Loading MP3 : " +
+			// filePath.substring(filePath.substring(0,
+			// filePath.lastIndexOf("\\") - 1).lastIndexOf("\\")));
+
+			currentlyLoadedMapPath = songFolder;
+		}
 	}
 
 	private static Date ask4lastAccess(String filePath) throws IOException, ParseException {
@@ -198,7 +237,7 @@ public class Listener {
 
 	private static void initialIndexing() throws IOException, ParseException {
 
-		File f = new File(osuPath);
+		File f = new File(props.getProperty("osuPath"));
 		System.out.println(new Date() + " starting initial indexing!");
 
 		songIndex = findDirectory(f);
@@ -221,13 +260,6 @@ public class Listener {
 
 	private static void initPaths() throws FileNotFoundException, IOException, ParseException {
 
-		Properties props = new Properties();
-		props.clear();
-		try {
-			props.load(Listener.class.getResourceAsStream("paths.properties"));
-		} catch (IOException e) {
-			e.printStackTrace();
-		}
 		osuPath = props.getProperty("osuPath").toString();
 		audioShieldPath = props.getProperty("audioShieldPath").toString();
 
@@ -262,7 +294,9 @@ public class Listener {
 				}
 
 			}
-			props.store(new FileOutputStream("resource/paths.properties"), null);
+			FileOutputStream nfoS = new FileOutputStream("resource/paths.properties");
+			props.store(nfoS, null);
+			nfoS.close();
 		}
 	}
 }
